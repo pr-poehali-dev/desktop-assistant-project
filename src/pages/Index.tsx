@@ -54,7 +54,41 @@ export default function Index() {
   const [telegramEnabled, setTelegramEnabled] = useState(true);
   const [yukiName, setYukiName] = useState("Юки");
   const [frameIndex, setFrameIndex] = useState(0);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Произносит текст голосом Юки через браузерный синтез речи
+  const speak = (text: string) => {
+    if (!voiceEnabled) return;
+    window.speechSynthesis.cancel();
+    const clean = text.replace(/[\u{1F300}-\u{1FFFF}]/gu, "").trim();
+    const utter = new SpeechSynthesisUtterance(clean);
+    utter.lang = "ru-RU";
+    utter.pitch = 1.4;
+    utter.rate = 1.05;
+    utter.volume = 1;
+
+    // Выбираем женский голос если есть
+    const voices = window.speechSynthesis.getVoices();
+    const ruFemale = voices.find(v =>
+      v.lang.startsWith("ru") && /female|woman|жен/i.test(v.name)
+    ) ?? voices.find(v => v.lang.startsWith("ru"));
+    if (ruFemale) utter.voice = ruFemale;
+
+    utter.onstart = () => setIsTalking(true);
+    utter.onend = () => setIsTalking(false);
+    utter.onerror = () => setIsTalking(false);
+    synthRef.current = utter;
+    window.speechSynthesis.speak(utter);
+  };
+
+  // Голоса грузятся асинхронно — инициализируем при первой загрузке
+  useEffect(() => {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    return () => { window.speechSynthesis.cancel(); };
+  }, []);
 
   // Покадровая анимация — переключает кадры с нужной скоростью
   useEffect(() => {
@@ -101,7 +135,7 @@ export default function Index() {
       if (chosen === "Покажи уведомления") { reply = "Открываю уведомления!"; setActivePanel("notifications"); setUnreadCount(0); }
       if (chosen === "Тихий режим") { reply = "Включаю тихий режим..."; setVolume(0); }
       setMessages(prev => [...prev, { role: "user", text: chosen }, { role: "yuki", text: reply }]);
-      setTimeout(() => setIsTalking(false), 2500);
+      speak(reply);
     }, 3000);
   };
 
@@ -120,7 +154,7 @@ export default function Index() {
     else if (lower.includes("как тебя зов")) reply = `Меня зовут ${yukiName}! Я твой помощник 💙`;
     setTimeout(() => {
       setMessages(prev => [...prev, { role: "yuki", text: reply }]);
-      setIsTalking(false);
+      speak(reply);
     }, 800);
   };
 
@@ -326,6 +360,7 @@ export default function Index() {
                     style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(74,144,226,0.2)", fontFamily: "'Golos Text', sans-serif" }} />
                 </div>
                 {[
+                  { label: "Голос Юки", val: voiceEnabled, set: setVoiceEnabled, color: "#a78bfa" },
                   { label: "Discord уведомления", val: discordEnabled, set: setDiscordEnabled, color: "#5865f2" },
                   { label: "Telegram уведомления", val: telegramEnabled, set: setTelegramEnabled, color: "#26a5e4" },
                   { label: "Авто-воспроизведение", val: autoPlay, set: setAutoPlay, color: "#4a90e2" },
@@ -409,16 +444,32 @@ export default function Index() {
                 </button>
               </div>
 
-              {/* Voice button */}
-              <button onClick={handleVoice} className="relative flex-shrink-0 rounded-full flex items-center justify-center transition-all"
-                style={{
-                  width: 52, height: 52,
-                  background: isListening ? "radial-gradient(circle, rgba(74,200,120,0.3), rgba(74,200,120,0.1))" : "radial-gradient(circle, rgba(74,144,226,0.3), rgba(74,144,226,0.1))",
-                  border: `2px solid ${isListening ? "rgba(74,200,120,0.6)" : "rgba(74,144,226,0.5)"}`,
-                  boxShadow: isListening ? "0 0 24px rgba(74,200,120,0.4)" : "0 0 16px rgba(74,144,226,0.3)",
-                }}>
-                <Icon name={isListening ? "MicOff" : "Mic"} size={20} className={isListening ? "text-green-300" : "text-blue-300"} />
-              </button>
+              {/* Voice button + speaker toggle */}
+              <div className="flex flex-col items-center gap-1">
+                <button onClick={handleVoice} className="relative flex-shrink-0 rounded-full flex items-center justify-center transition-all"
+                  style={{
+                    width: 52, height: 52,
+                    background: isListening ? "radial-gradient(circle, rgba(74,200,120,0.3), rgba(74,200,120,0.1))"
+                      : isTalking ? "radial-gradient(circle, rgba(167,139,250,0.35), rgba(167,139,250,0.1))"
+                      : "radial-gradient(circle, rgba(74,144,226,0.3), rgba(74,144,226,0.1))",
+                    border: `2px solid ${isListening ? "rgba(74,200,120,0.6)" : isTalking ? "rgba(167,139,250,0.7)" : "rgba(74,144,226,0.5)"}`,
+                    boxShadow: isListening ? "0 0 24px rgba(74,200,120,0.4)" : isTalking ? "0 0 24px rgba(167,139,250,0.5)" : "0 0 16px rgba(74,144,226,0.3)",
+                  }}>
+                  <Icon name={isListening ? "MicOff" : "Mic"} size={20}
+                    className={isListening ? "text-green-300" : isTalking ? "text-purple-300" : "text-blue-300"} />
+                </button>
+                {/* Кнопка вкл/выкл голоса */}
+                <button onClick={() => { setVoiceEnabled(v => !v); window.speechSynthesis.cancel(); }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full transition-all"
+                  style={{
+                    background: voiceEnabled ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.06)",
+                    border: `1px solid ${voiceEnabled ? "rgba(167,139,250,0.4)" : "rgba(255,255,255,0.1)"}`,
+                  }}>
+                  <Icon name={voiceEnabled ? "Volume2" : "VolumeX"} size={10}
+                    className={voiceEnabled ? "text-purple-300" : "text-white/30"} />
+                  <span className="text-white/40" style={{ fontSize: 9 }}>{voiceEnabled ? "вкл" : "выкл"}</span>
+                </button>
+              </div>
 
               <div className="flex gap-1.5">
                 <button onClick={() => togglePanel("notifications")} className={`btn-yuki px-3 py-2 flex items-center gap-1.5 text-xs relative ${activePanel === "notifications" ? "active" : ""}`}>
