@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
-const ASSISTANT_IMAGE = "https://cdn.poehali.dev/projects/a04100fc-3399-4f33-a69e-ae5981f2a1d2/files/96bec31c-1d74-4494-9ce8-7262504d6bcb.jpg";
+// Кадры анимации — добавляй новые картинки сюда для покадровой анимации
+const FRAMES: Record<string, string[]> = {
+  idle: [
+    "https://cdn.poehali.dev/projects/a04100fc-3399-4f33-a69e-ae5981f2a1d2/bucket/b1bdc2b1-0446-4123-9e47-9e4ee7f16554.png",
+  ],
+  talking: [
+    "https://cdn.poehali.dev/projects/a04100fc-3399-4f33-a69e-ae5981f2a1d2/bucket/b1bdc2b1-0446-4123-9e47-9e4ee7f16554.png",
+  ],
+  listening: [
+    "https://cdn.poehali.dev/projects/a04100fc-3399-4f33-a69e-ae5981f2a1d2/bucket/b1bdc2b1-0446-4123-9e47-9e4ee7f16554.png",
+  ],
+};
 
 const TRACKS = [
   { id: 1, title: "Midnight Echo", artist: "Yuki Mix", duration: "3:42" },
@@ -42,7 +53,18 @@ export default function Index() {
   const [discordEnabled, setDiscordEnabled] = useState(true);
   const [telegramEnabled, setTelegramEnabled] = useState(true);
   const [yukiName, setYukiName] = useState("Юки");
+  const [frameIndex, setFrameIndex] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Покадровая анимация — переключает кадры с нужной скоростью
+  useEffect(() => {
+    const state = isTalking ? "talking" : isListening ? "listening" : "idle";
+    const frames = FRAMES[state];
+    if (frames.length <= 1) { setFrameIndex(0); return; }
+    const fps = isTalking ? 120 : isListening ? 180 : 400;
+    const t = setInterval(() => setFrameIndex(i => (i + 1) % frames.length), fps);
+    return () => clearInterval(t);
+  }, [isTalking, isListening]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -102,6 +124,8 @@ export default function Index() {
     }, 800);
   };
 
+  const animState = isTalking ? "talking" : isListening ? "listening" : "idle";
+  const currentFrame = FRAMES[animState][frameIndex] ?? FRAMES.idle[0];
   const charClass = `yuki-character${isTalking ? " talking" : isListening ? " listening" : ""}`;
 
   return (
@@ -348,9 +372,20 @@ export default function Index() {
               <div className="voice-ring absolute rounded-full" style={{ width: 230, height: 230, border: "1px solid rgba(74,200,120,0.2)", animationDelay: "0.5s" }} />
             </div>
           )}
-          <img src={ASSISTANT_IMAGE} alt={yukiName}
+          {/* Покадровая анимация — при смене кадра изображение переключается */}
+          <img
+            key={currentFrame}
+            src={currentFrame}
+            alt={yukiName}
             className={charClass}
-            style={{ height: 280, width: "auto", objectFit: "contain", cursor: "pointer", display: "block" }}
+            style={{
+              height: 300,
+              width: "auto",
+              objectFit: "contain",
+              cursor: "pointer",
+              display: "block",
+              imageRendering: "crisp-edges",
+            }}
             onClick={() => togglePanel("chat")}
           />
         </div>
